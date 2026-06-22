@@ -14,7 +14,24 @@ const Auctions = () => {
   const [now, setNow] = useState(getCurrentTime());
   const [customBidAmount, setCustomBidAmount] = useState({});
   const [showCustomBid, setShowCustomBid] = useState({});
+  const [activeTab, setActiveTab] = useState('active'); // 'active' or 'history'
   const intervalRef = useRef(null);
+  const prevAuctionsRef = useRef([]);
+
+  // Transition detector to toast the winner when an active auction transitions to ended
+  useEffect(() => {
+    prevAuctionsRef.current.forEach(prevA => {
+      const currentA = auctions.find(a => a.id === prevA.id);
+      if (prevA.status === 'active' && currentA && currentA.status === 'ended') {
+        if (currentA.highestBidder) {
+          addToast(`🎉 ${currentA.highestBidder} won ${currentA.playerName} for ${currentA.currentBid} CR!`, 'success');
+        } else {
+          addToast(`⚽ Auction ended for ${currentA.playerName} (Unsold)`, 'info');
+        }
+      }
+    });
+    prevAuctionsRef.current = auctions;
+  }, [auctions, addToast]);
 
   const user = users.find(u => u.name === currentUser);
   const activeAuctions = auctions.filter(a => a.status === 'active');
@@ -82,18 +99,46 @@ const Auctions = () => {
   };
 
   return (
-    <div className="min-h-screen bg-dark p-4 pb-24">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="pt-8 pb-4"
-      >
-        <h1 className="text-2xl font-bold text-white">🔥 Auctions</h1>
-        <p className="text-white/40 text-sm mt-1">{activeAuctions.length} active, {endedAuctions.length} ended</p>
-      </motion.div>
+    <div className="min-h-screen bg-dark p-3 sm:p-4 pb-32 overflow-x-hidden">
+      <div className="max-w-md mx-auto w-full">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="pt-4 pb-2 sm:pt-8 sm:pb-4"
+        >
+          <h1 className="text-xl sm:text-2xl font-bold text-white">🔥 Auctions</h1>
+          <p className="text-white/40 text-xs sm:text-sm mt-1">{activeAuctions.length} active, {endedAuctions.length} completed</p>
+        </motion.div>
 
-      {/* Active Auctions */}
-      <div className="flex flex-col gap-4 mb-8">
+        {/* Tab Headers */}
+        <div className="flex bg-white/5 p-1 rounded-xl mb-6 border border-white/10 w-full">
+          <button
+            onClick={() => setActiveTab('active')}
+            type="button"
+            className={`flex-1 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+              activeTab === 'active'
+                ? 'bg-neon text-dark shadow-md font-bold'
+                : 'text-white/60 hover:text-white'
+            }`}
+          >
+            Active Auctions ({activeAuctions.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            type="button"
+            className={`flex-1 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+              activeTab === 'history'
+                ? 'bg-neon text-dark shadow-md font-bold'
+                : 'text-white/60 hover:text-white'
+            }`}
+          >
+            History ({endedAuctions.length})
+          </button>
+        </div>
+
+      {/* Active Auctions Tab */}
+      {activeTab === 'active' && (
+        <div className="flex flex-col gap-4 mb-8">
         <AnimatePresence>
           {activeAuctions.map((auction) => {
             const timeLeft = auction.endsAt - now;
@@ -271,38 +316,76 @@ const Auctions = () => {
           </motion.div>
         )}
       </div>
+      )}
 
-      {/* Recently Ended */}
-      {endedAuctions.length > 0 && (
-        <div>
-          <h3 className="text-white font-semibold mb-3">Recently Ended</h3>
-          <div className="flex flex-col gap-2">
-            {endedAuctions.slice(-3).map(auction => (
-              <div key={auction.id} className="glass-card p-4 flex items-center gap-3 opacity-60">
-                <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10 overflow-hidden">
-                  {getFlagUrl(auction.country) ? (
-                    <img 
-                      src={getFlagUrl(auction.country)} 
-                      alt={auction.country} 
-                      className="w-full h-full object-cover" 
-                    />
-                  ) : (
-                    <span>{COUNTRY_FLAGS[auction.country] || '🏳️'}</span>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className="text-white text-sm font-medium">{auction.playerName}</p>
-                  <p className="text-white/30 text-xs">
-                    {auction.highestBidder 
-                      ? `Won by ${auction.highestBidder} for ${auction.currentBid} CR`
-                      : 'No bids - unsold'}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Auction History Tab */}
+      {activeTab === 'history' && (
+        <div className="flex flex-col gap-4 mb-8">
+          <AnimatePresence>
+            {endedAuctions.slice().reverse().map(auction => {
+              const isWinner = auction.highestBidder === currentUser;
+              return (
+                <motion.div
+                  key={auction.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass-card p-4 flex items-center gap-3 relative overflow-hidden border-white/5"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-xl border border-white/10 overflow-hidden shrink-0">
+                    {getFlagUrl(auction.country) ? (
+                      <img 
+                        src={getFlagUrl(auction.country)} 
+                        alt={auction.country} 
+                        className="w-full h-full object-cover" 
+                      />
+                    ) : (
+                      <span>{COUNTRY_FLAGS[auction.country] || '🏳️'}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-white font-bold text-sm truncate">{auction.playerName}</h3>
+                    <p className="text-white/40 text-xs mt-0.5">{auction.position} • {auction.country}</p>
+                    
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {auction.highestBidder ? (
+                        <>
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            isWinner 
+                              ? 'bg-neon/20 text-neon border border-neon/30' 
+                              : 'bg-white/5 text-white/70 border border-white/10'
+                          }`}>
+                            Won by {auction.highestBidder}
+                          </span>
+                          <span className="text-[10px] text-white/50 font-semibold font-mono">
+                            Price: {auction.currentBid} CR
+                          </span>
+                          {isWinner && (
+                            <span className="text-xs">🎉</span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-bold uppercase tracking-wide">
+                          Unsold
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+
+          {endedAuctions.length === 0 && (
+            <div className="glass-card p-8 text-center">
+              <div className="text-3xl mb-2">📜</div>
+              <p className="text-white/40 text-sm">No auction history yet</p>
+              <p className="text-white/20 text-xs mt-1">Completed auctions will appear here.</p>
+            </div>
+          )}
         </div>
       )}
+
+      </div>
 
       {/* Floating Start Auction Button */}
       <motion.button
