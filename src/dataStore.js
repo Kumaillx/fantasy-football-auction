@@ -1,5 +1,5 @@
-// Simulated Firestore data store with reactive subscriptions
-// In production, replace with actual Firebase Firestore imports
+import { ref, onValue, set, push, runTransaction } from 'firebase/database';
+import { db } from './firebase';
 
 const USERS = ['Huzaifa', 'Haider', 'Hamdan', 'Kumail', 'Wassay'];
 
@@ -315,8 +315,66 @@ export const getUserBidsCreatedCount = (userName, timestamp = getCurrentTime()) 
   return state.auctions.filter(a => a.startedBy === userName && a.auctionDay === auctionDay && a.status !== 'deleted').length;
 };
 
-export const setMockTimeOffset = (offset) => {
-  updateState(s => ({ ...s, mockTimeOffset: offset }));
+// Listen to Realtime Database root node
+let dbInitialized = false;
+
+onValue(ref(db, '/'), (snapshot) => {
+  const data = snapshot.val();
+  if (data) {
+    dbInitialized = true;
+    
+    const firebaseUsers = data.users ? Object.values(data.users) : [];
+    const firebaseAuctions = data.auctions ? Object.values(data.auctions) : [];
+    const firebaseBids = data.bids ? Object.values(data.bids) : [];
+    const firebasePlayersWon = data.playersWon ? Object.values(data.playersWon) : [];
+    const firebaseActivityFeed = data.activityFeed ? Object.values(data.activityFeed) : [];
+    
+    // Sort elements to maintain consistent ordering
+    firebasePlayersWon.sort((a, b) => (a.wonAt || 0) - (b.wonAt || 0));
+    firebaseActivityFeed.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    state = {
+      ...state,
+      users: firebaseUsers.length > 0 ? firebaseUsers : initialData.users,
+      auctions: firebaseAuctions,
+      bids: firebaseBids,
+      playersWon: firebasePlayersWon.length > 0 ? firebasePlayersWon : initialData.playersWon,
+      activityFeed: firebaseActivityFeed,
+      tournamentName: data.settings?.tournamentName || 'Fantasy Football Auction',
+      mockTimeOffset: data.settings?.mockTimeOffset || 0,
+    };
+    notifyListeners();
+  } else {
+    // Database is empty. Populate with default values!
+    if (!dbInitialized) {
+      dbInitialized = true;
+      initializeDatabase();
+    }
+  }
+});
+
+const initializeDatabase = () => {
+  const initialUsers = {};
+  initialData.users.forEach(u => {
+    initialUsers[u.name.toLowerCase()] = u;
+  });
+
+  const initialPlayersWon = {};
+  initialData.playersWon.forEach(p => {
+    initialPlayersWon[p.id] = p;
+  });
+
+  set(ref(db, '/'), {
+    users: initialUsers,
+    settings: {
+      tournamentName: 'Fantasy Football Auction',
+      mockTimeOffset: 0
+    },
+    auctions: {},
+    bids: {},
+    playersWon: initialPlayersWon,
+    activityFeed: {}
+  });
 };
 
 // Actions
@@ -349,7 +407,7 @@ export const startAuction = (auctionData) => {
     startingPrice: auctionData.startingPrice || 1,
     startedBy: auctionData.startedBy,
     currentBid: auctionData.startingPrice || 1,
-    highestBidder: null,
+    highestBidder: "",
     status: 'active',
     createdAt: now,
     endsAt: baseDeadline,
@@ -357,19 +415,17 @@ export const startAuction = (auctionData) => {
     extensionCount: 0,
   };
 
-  updateState(s => ({
-    ...s,
-    auctions: [...s.auctions, auction],
-    activityFeed: [
-      {
-        id: now.toString(),
-        type: 'auction_started',
-        message: `${auctionData.startedBy} started auction for ${auctionData.playerName}`,
-        timestamp: now,
-      },
-      ...s.activityFeed
-    ].slice(0, 50)
-  }));
+  // Write new auction document
+  set(ref(db, `/auctions/${auction.id}`), auction);
+
+  // Write log to activity feed
+  const newActivityRef = push(ref(db, '/activityFeed'));
+  set(newActivityRef, {
+    id: newActivityRef.key,
+    type: 'auction_started',
+    message: `${auctionData.startedBy} started auction for ${auctionData.playerName}`,
+    timestamp: now,
+  });
 
   return auction;
 };
@@ -383,56 +439,67 @@ export const placeBid = (auctionId, bidder, amount) => {
 
   if (amount <= auction.currentBid) return false;
 
-  const now = getCurrentTime();
-  const endsAt = auction.endsAt;
-  const timeLeft = endsAt - now;
-  if (timeLeft <= 0) return false; // Auction has expired
+  const auctionRef = ref(db, `/auctions/${auctionId}`);
+  runTransaction(auctionRef, (currentAuction) => {
+    if (!currentAuction || currentAuction.status !== 'active') return;
+    if (amount <= currentAuction.currentBid) return;
 
-  // Determine baseDeadline for the auction's target day
-  const [y, m, d] = auction.auctionDay.split('-').map(Number);
-  const baseDeadline = Date.UTC(y, m - 1, d, 12, 0, 0, 0);
+    const now = getCurrentTime();
+    const endsAt = currentAuction.endsAt;
+    const timeLeft = endsAt - now;
+    if (timeLeft <= 0) return;
 
-  let newEndsAt = endsAt;
-  let newExtensionCount = auction.extensionCount || 0;
+    const [y, m, d] = currentAuction.auctionDay.split('-').map(Number);
+    const baseDeadline = Date.UTC(y, m - 1, d, 12, 0, 0, 0);
 
-  // Extension Window Rule:
-  // If endsAt is the base deadline (5:00 PM PKT) and someone places a bid within the last 20 minutes before it (<= 20 minutes left):
-  // Extend auction to 5:20 PM PKT
-  if (endsAt === baseDeadline) {
-    const twentyMinsInMs = 20 * 60 * 1000;
-    if (timeLeft <= twentyMinsInMs) {
-      newEndsAt = Date.UTC(y, m - 1, d, 12, 20, 0, 0); // 5:20 PM PKT
-    }
-  } else if (endsAt > baseDeadline) {
-    // Last-Minute Protection Rule:
-    // If endsAt is already extended and bid comes in during the last minute (<= 1 minute left):
-    const oneMinInMs = 60 * 1000;
-    if (timeLeft <= oneMinInMs) {
-      if (newExtensionCount < 10) {
-        newEndsAt = endsAt + 60 * 1000; // Add 1 minute
-        newExtensionCount += 1;
+    let newEndsAt = endsAt;
+    let newExtensionCount = currentAuction.extensionCount || 0;
+
+    if (endsAt === baseDeadline) {
+      const twentyMinsInMs = 20 * 60 * 1000;
+      if (timeLeft <= twentyMinsInMs) {
+        newEndsAt = Date.UTC(y, m - 1, d, 12, 20, 0, 0);
+      }
+    } else if (endsAt > baseDeadline) {
+      const oneMinInMs = 60 * 1000;
+      if (timeLeft <= oneMinInMs) {
+        if (newExtensionCount < 10) {
+          newEndsAt = endsAt + 60 * 1000;
+          newExtensionCount += 1;
+        }
       }
     }
-  }
 
-  updateState(s => ({
-    ...s,
-    auctions: s.auctions.map(a => 
-      a.id === auctionId 
-        ? { ...a, currentBid: amount, highestBidder: bidder, endsAt: newEndsAt, extensionCount: newExtensionCount }
-        : a
-    ),
-    bids: [...s.bids, { auctionId, bidder, amount, timestamp: now }],
-    activityFeed: [
-      {
-        id: now.toString(),
+    currentAuction.currentBid = amount;
+    currentAuction.highestBidder = bidder;
+    currentAuction.endsAt = newEndsAt;
+    currentAuction.extensionCount = newExtensionCount;
+
+    return currentAuction;
+  }).then((result) => {
+    if (result.committed) {
+      const now = getCurrentTime();
+      
+      // Save bid record
+      const bidRef = push(ref(db, '/bids'));
+      set(bidRef, {
+        id: bidRef.key,
+        auctionId,
+        bidder,
+        amount,
+        timestamp: now
+      });
+
+      // Save activity feed log
+      const activityRef = push(ref(db, '/activityFeed'));
+      set(activityRef, {
+        id: activityRef.key,
         type: 'bid',
         message: `${bidder} bid ${amount} CR on ${auction.playerName}`,
         timestamp: now,
-      },
-      ...s.activityFeed
-    ].slice(0, 50)
-  }));
+      });
+    }
+  });
 
   return true;
 };
@@ -441,88 +508,95 @@ export const endAuction = (auctionId) => {
   const auction = state.auctions.find(a => a.id === auctionId);
   if (!auction || auction.status !== 'active') return;
 
-  const winner = auction.highestBidder;
-  const now = getCurrentTime();
+  const auctionRef = ref(db, `/auctions/${auctionId}`);
+  runTransaction(auctionRef, (currentAuction) => {
+    if (!currentAuction || currentAuction.status !== 'active') return;
+    currentAuction.status = 'ended';
+    return currentAuction;
+  }).then((result) => {
+    if (result.committed) {
+      const endedAuction = result.snapshot.val();
+      const winner = endedAuction.highestBidder;
+      const now = getCurrentTime();
 
-  if (winner) {
-    const wonPlayer = {
-      id: now.toString(),
-      playerName: auction.playerName,
-      owner: winner,
-      price: auction.currentBid,
-      country: auction.country,
-      position: auction.position,
-      club: '',
-      wonAt: now,
-    };
-
-    updateState(s => ({
-      ...s,
-      users: s.users.map(u => 
-        u.name === winner 
-          ? { 
-              ...u, 
-              budget: u.budget - auction.currentBid,
-              spent: u.spent + auction.currentBid,
-              playersOwned: [...u.playersOwned, wonPlayer]
-            }
-          : u
-      ),
-      auctions: s.auctions.map(a => 
-        a.id === auctionId ? { ...a, status: 'ended' } : a
-      ),
-      playersWon: [...s.playersWon, wonPlayer],
-      activityFeed: [
-        {
+      if (winner) {
+        const wonPlayer = {
           id: now.toString(),
-          type: 'auction_won',
-          message: `${winner} won ${auction.playerName} for ${auction.currentBid} CR`,
-          timestamp: now,
-        },
-        ...s.activityFeed
-      ].slice(0, 50)
-    }));
+          playerName: endedAuction.playerName,
+          owner: winner,
+          price: endedAuction.currentBid,
+          country: endedAuction.country,
+          position: endedAuction.position,
+          club: '',
+          wonAt: now,
+        };
 
-    return wonPlayer;
-  } else {
-    updateState(s => ({
-      ...s,
-      auctions: s.auctions.map(a => 
-        a.id === auctionId ? { ...a, status: 'ended' } : a
-      ),
-    }));
-    return null;
-  }
+        // Deduct winner budget in users list
+        const userRef = ref(db, `/users/${winner.toLowerCase()}`);
+        runTransaction(userRef, (currentUserData) => {
+          if (!currentUserData) return;
+          currentUserData.budget -= endedAuction.currentBid;
+          currentUserData.spent += endedAuction.currentBid;
+          currentUserData.playersOwned = currentUserData.playersOwned || [];
+          currentUserData.playersOwned.push(wonPlayer);
+          return currentUserData;
+        });
+
+        // Save playersWon record
+        set(ref(db, `/playersWon/${wonPlayer.id}`), wonPlayer);
+
+        // Save activity won log
+        const activityRef = push(ref(db, '/activityFeed'));
+        set(activityRef, {
+          id: activityRef.key,
+          type: 'auction_won',
+          message: `${winner} won ${endedAuction.playerName} for ${endedAuction.currentBid} CR`,
+          timestamp: now,
+        });
+      }
+    }
+  });
 };
 
 export const resetLeague = () => {
   const resetData = getInitialData(state.defaultBudget);
-  updateState(s => ({
-    ...s,
-    users: resetData.users,
-    auctions: [],
-    bids: [],
-    playersWon: resetData.playersWon,
-    activityFeed: [],
-  }));
+  const initialUsers = {};
+  resetData.users.forEach(u => {
+    initialUsers[u.name.toLowerCase()] = u;
+  });
+
+  const initialPlayersWon = {};
+  resetData.playersWon.forEach(p => {
+    initialPlayersWon[p.id] = p;
+  });
+
+  set(ref(db, '/'), {
+    users: initialUsers,
+    settings: {
+      tournamentName: 'Fantasy Football Auction',
+      mockTimeOffset: 0
+    },
+    auctions: {},
+    bids: {},
+    playersWon: initialPlayersWon,
+    activityFeed: {}
+  });
 };
 
 export const updateBudget = (userName, newBudget) => {
-  updateState(s => ({
-    ...s,
-    users: s.users.map(u => 
-      u.name === userName ? { ...u, budget: newBudget } : u
-    ),
-    defaultBudget: newBudget,
-  }));
+  set(ref(db, `/users/${userName.toLowerCase()}/budget`), newBudget);
 };
 
 export const updateTournamentName = (name) => {
-  updateState(s => ({ ...s, tournamentName: name }));
+  set(ref(db, '/settings/tournamentName'), name);
+};
+
+export const setMockTimeOffset = (offset) => {
+  set(ref(db, '/settings/mockTimeOffset'), offset);
 };
 
 export const updateDefaultDuration = (seconds) => {
-  updateState(s => ({ ...s, defaultDuration: seconds }));
+  // Obsolete, replaced by global deadline
 };
 
 export { USERS, COUNTRY_FLAGS, POSITIONS, CLUBS };
