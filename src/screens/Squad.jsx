@@ -77,6 +77,55 @@ const PLAYER_ROLES = {
   'Fabián Ruiz': 'CM'
 };
 
+const sortDefenders = (defendersList) => {
+  const lbs = [];
+  const rbs = [];
+  const cbs = [];
+  
+  defendersList.forEach(p => {
+    const role = PLAYER_ROLES[p.playerName] || '';
+    if (role === 'LB') lbs.push(p);
+    else if (role === 'RB') rbs.push(p);
+    else cbs.push(p);
+  });
+  
+  return [...lbs, ...cbs, ...rbs];
+};
+
+const sortForwards = (forwardsList) => {
+  const lws = [];
+  const rws = [];
+  const sts = [];
+  
+  forwardsList.forEach(p => {
+    const role = PLAYER_ROLES[p.playerName] || '';
+    if (role === 'LW') lws.push(p);
+    else if (role === 'RW') rws.push(p);
+    else sts.push(p);
+  });
+  
+  return [...lws, ...sts, ...rws];
+};
+
+const getRoleFullName = (role) => {
+  const mapping = {
+    'GK': 'Goalkeeper',
+    'LB': 'Left Back',
+    'RB': 'Right Back',
+    'CB': 'Center Back',
+    'CM': 'Central Midfielder',
+    'DM': 'Defensive Midfielder',
+    'CAM': 'Attacking Midfielder',
+    'LW': 'Left Winger',
+    'RW': 'Right Winger',
+    'ST': 'Striker',
+    'FWD': 'Forward',
+    'MID': 'Midfielder',
+    'DEF': 'Defender'
+  };
+  return mapping[role] || role;
+};
+
 const Squad = () => {
   const { currentUser } = useUser();
   const { users } = useAppState();
@@ -92,9 +141,9 @@ const Squad = () => {
   };
 
   const gk = getPlayersByPosition('Goalkeeper');
-  const defs = getPlayersByPosition('Defender');
+  const defs = sortDefenders(getPlayersByPosition('Defender'));
   const mids = getPlayersByPosition('Midfielder');
-  const fwds = getPlayersByPosition('Forward');
+  const fwds = sortForwards(getPlayersByPosition('Forward'));
 
   const getRole = (player) => {
     return PLAYER_ROLES[player.playerName] || (
@@ -134,11 +183,11 @@ const Squad = () => {
                 {COUNTRY_FLAGS[player.country] || '⚽'}
               </span>
             )}
-            
-            {/* Tactical Role Pill */}
-            <div className="absolute -bottom-1 -right-1 bg-dark/95 border border-white/10 px-1 rounded text-[7px] sm:text-[8px] font-black text-white scale-90 tracking-tight z-15">
-              {role}
-            </div>
+          </div>
+
+          {/* Tactical Role Pill */}
+          <div className="absolute -bottom-1 -right-1 bg-dark/95 border border-white/20 px-1 rounded text-[7px] sm:text-[8px] font-black text-white scale-90 tracking-tight z-20 shadow-md">
+            {role}
           </div>
         </div>
 
@@ -269,17 +318,19 @@ const Squad = () => {
                   onClick={() => setSelectedPlayer(p)}
                   className="glass-card p-3 min-w-[110px] flex flex-col items-center border border-white/5 cursor-pointer hover:border-white/20 transition-colors"
                 >
-                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-lg mb-1.5 border border-white/10 relative overflow-hidden">
-                    {getFlagUrl(p.country) ? (
-                      <img 
-                        src={getFlagUrl(p.country)} 
-                        alt={p.country} 
-                        className="w-full h-full object-cover" 
-                      />
-                    ) : (
-                      <span>{COUNTRY_FLAGS[p.country] || '⚽'}</span>
-                    )}
-                    <span className="absolute -bottom-1 -right-1 bg-dark border border-white/10 px-1 rounded text-[6px] font-black text-white z-10">
+                  <div className="relative mb-1.5">
+                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-lg border border-white/10 overflow-hidden">
+                      {getFlagUrl(p.country) ? (
+                        <img 
+                          src={getFlagUrl(p.country)} 
+                          alt={p.country} 
+                          className="w-full h-full object-cover" 
+                        />
+                      ) : (
+                        <span>{COUNTRY_FLAGS[p.country] || '⚽'}</span>
+                      )}
+                    </div>
+                    <span className="absolute -bottom-1 -right-1 bg-dark border border-white/20 px-1 rounded text-[6px] font-black text-white z-20 shadow-sm">
                       {role}
                     </span>
                   </div>
@@ -337,7 +388,7 @@ const Squad = () => {
                 </div>
                 <h3 className="text-white font-black text-xl mb-1">{selectedPlayer.playerName}</h3>
                 <span className="px-2.5 py-0.5 rounded-full bg-neon/10 border border-neon/30 text-neon font-black text-[10px] tracking-wide uppercase">
-                  {getRole(selectedPlayer)} • {selectedPlayer.position}
+                  {getRoleFullName(getRole(selectedPlayer))}
                 </span>
               </div>
 

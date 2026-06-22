@@ -102,15 +102,32 @@ const Settings = () => {
           className="glass-card p-5"
         >
           <label className="block text-white/50 text-sm font-medium mb-2">Default Auction Duration (seconds)</label>
-          <div className="flex gap-2">
-            <input
-              type="number"
-              value={newDuration}
-              onChange={(e) => setNewDuration(Number(e.target.value))}
-              min="10"
-              max="600"
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-neon/50"
-            />
+          <div className="flex gap-2 w-full">
+            <div className="flex-1 relative flex items-center bg-white/5 border border-white/10 rounded-xl px-4 py-2">
+              <input
+                type="number"
+                value={newDuration}
+                onChange={(e) => setNewDuration(Number(e.target.value))}
+                className="flex-1 bg-transparent border-none text-white focus:outline-none focus:ring-0"
+              />
+              <div className="flex flex-col gap-0.5 mr-2 select-none">
+                <button
+                  type="button"
+                  onClick={() => setNewDuration(prev => Math.min(600, prev + 10))}
+                  className="w-6 h-3.5 rounded bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 active:scale-95 transition-all text-[6px]"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewDuration(prev => Math.max(10, prev - 10))}
+                  className="w-6 h-3.5 rounded bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 active:scale-95 transition-all text-[6px]"
+                >
+                  ▼
+                </button>
+              </div>
+              <span className="text-white/30 text-xs font-medium">sec</span>
+            </div>
             <button
               onClick={handleUpdateDuration}
               className="bg-neon/10 text-neon px-4 rounded-xl font-medium text-sm border border-neon/30"
@@ -128,15 +145,32 @@ const Settings = () => {
           className="glass-card p-5"
         >
           <label className="block text-white/50 text-sm font-medium mb-2">Starting Budget (CR)</label>
-          <div className="flex gap-2">
-            <input
-              type="number"
-              value={newBudget}
-              onChange={(e) => setNewBudget(Number(e.target.value))}
-              min="50"
-              max="500"
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-neon/50"
-            />
+          <div className="flex gap-2 w-full">
+            <div className="flex-1 relative flex items-center bg-white/5 border border-white/10 rounded-xl px-4 py-2">
+              <input
+                type="number"
+                value={newBudget}
+                onChange={(e) => setNewBudget(Number(e.target.value))}
+                className="flex-1 bg-transparent border-none text-white focus:outline-none focus:ring-0"
+              />
+              <div className="flex flex-col gap-0.5 mr-2 select-none">
+                <button
+                  type="button"
+                  onClick={() => setNewBudget(prev => Math.min(500, prev + 10))}
+                  className="w-6 h-3.5 rounded bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 active:scale-95 transition-all text-[6px]"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewBudget(prev => Math.max(50, prev - 10))}
+                  className="w-6 h-3.5 rounded bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 active:scale-95 transition-all text-[6px]"
+                >
+                  ▼
+                </button>
+              </div>
+              <span className="text-white/30 text-xs font-medium">CR</span>
+            </div>
             <button
               onClick={handleUpdateBudget}
               className="bg-neon/10 text-neon px-4 rounded-xl font-medium text-sm border border-neon/30"
