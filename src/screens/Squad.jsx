@@ -1,132 +1,386 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAppState } from '../context/AppContext';
 import { useUser } from '../context/UserContext';
-import { COUNTRY_FLAGS } from '../dataStore';
+import { COUNTRY_FLAGS, getFlagUrl } from '../dataStore';
+
+const PLAYER_ROLES = {
+  // Huzaifa
+  'Mike Maignan': 'GK',
+  'Pau Cubarsí': 'CB',
+  'Marc Cucurella': 'LB',
+  'Cristian Romero': 'CB',
+  'Nahuel Molina': 'RB',
+  'João Neves': 'CM',
+  'Enzo Fernández': 'CM',
+  'Aleksandar Pavlović': 'CM',
+  'Michael Olise': 'LW',
+  'Lamine Yamal': 'RW',
+  'Kai Havertz': 'ST',
+  'Nico Williams': 'LW',
+  'Ryan Gravenberch': 'CM',
+  // Hamdan
+  'Diogo Costa': 'GK',
+  'Gabriel Magalhães': 'CB',
+  'Achraf Hakimi': 'RB',
+  'Lisandro Martínez': 'CB',
+  'William Saliba': 'CB',
+  'Pedri': 'CM',
+  'Bruno Fernandes': 'CM',
+  'Vitinha': 'CM',
+  'Erling Haaland': 'RW',
+  'Marcus Rashford': 'LW',
+  'Romelu Lukaku': 'ST',
+  'Elliot Anderson': 'CM',
+  'Marcos Llorente': 'CB',
+  // Haider
+  'Yassine Bounou': 'GK',
+  'Dayot Upamecano': 'CB',
+  'Joško Gvardiol': 'CB',
+  'João Cancelo': 'RB',
+  'Micky van de Ven': 'LB',
+  'Rodri': 'CM',
+  'Florian Wirtz': 'CM',
+  'Lionel Messi': 'CAM',
+  'Vinícius Júnior': 'LW',
+  'Harry Kane': 'ST',
+  'Raphinha': 'RW',
+  'João Félix': 'ST',
+  'Kevin De Bruyne': 'CM',
+  // Wassay
+  'Emiliano Martínez': 'GK',
+  'Joshua Kimmich': 'RB',
+  'Virgil van Dijk': 'CB',
+  'Jonathan Tah': 'CB',
+  'Theo Hernández': 'LB',
+  'Jude Bellingham': 'CM',
+  'Declan Rice': 'CM',
+  'Federico Valverde': 'CM',
+  'Kylian Mbappé': 'ST',
+  'Luis Díaz': 'LW',
+  'Julián Álvarez': 'RW',
+  'Matheus Nunes': 'CB',
+  'Ferran Torres': 'ST',
+  // Kumail
+  'Alisson': 'GK',
+  'Nico Schlotterbeck': 'CB',
+  'Jules Koundé': 'CB',
+  'Nuno Mendes': 'LB',
+  'Nico O\'Reilly': 'RB',
+  'Frenkie de Jong': 'CM',
+  'Jamal Musiala': 'CAM',
+  'Alexis Mac-Allister': 'CM',
+  'Mikel Oyarzabal': 'ST',
+  'Cristiano Ronaldo': 'ST',
+  'Ousmane Dembélé': 'RW',
+  'Désiré Doué': 'RW',
+  'Fabián Ruiz': 'CM'
+};
 
 const Squad = () => {
   const { currentUser } = useUser();
   const { users } = useAppState();
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
 
   const user = users.find(u => u.name === currentUser);
   const players = user?.playersOwned || [];
+  const starters = players.slice(0, 11);
+  const subs = players.slice(11);
 
   const getPlayersByPosition = (position) => {
-    return players.filter(p => p.position === position);
+    return starters.filter(p => p.position === position);
   };
-
-  const PlayerCard = ({ player, delay }) => (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.8 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay, type: 'spring', stiffness: 150 }}
-      className="flex flex-col items-center"
-    >
-      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-white/15 to-white/5 flex items-center justify-center text-xl border border-white/15 shadow-lg mb-2">
-        {COUNTRY_FLAGS[player.country] || '⚽'}
-      </div>
-      <p className="text-white text-xs font-medium text-center truncate w-20">{player.playerName}</p>
-      <p className="text-neon text-xs font-bold">{player.price} CR</p>
-    </motion.div>
-  );
-
-  const EmptySlot = () => (
-    <div className="w-14 h-14 rounded-2xl bg-white/5 border border-dashed border-white/10 flex items-center justify-center mb-2">
-      <span className="text-white/20 text-xs">+</span>
-    </div>
-  );
-
-  const PositionRow = ({ title, players, position, delayStart = 0 }) => (
-    <div className="mb-6">
-      <div className="flex items-center justify-center gap-2 mb-3">
-        <div className="h-px flex-1 bg-white/10" />
-        <p className="text-white/40 text-xs font-medium uppercase tracking-wider">{title}</p>
-        <div className="h-px flex-1 bg-white/10" />
-      </div>
-      <div className="flex justify-center gap-4 flex-wrap">
-        {players.length > 0 ? (
-          players.map((p, i) => <PlayerCard key={p.id} player={p} delay={delayStart + i * 0.1} />)
-        ) : (
-          <EmptySlot />
-        )}
-      </div>
-    </div>
-  );
 
   const gk = getPlayersByPosition('Goalkeeper');
   const defs = getPlayersByPosition('Defender');
   const mids = getPlayersByPosition('Midfielder');
   const fwds = getPlayersByPosition('Forward');
 
+  const getRole = (player) => {
+    return PLAYER_ROLES[player.playerName] || (
+      player.position === 'Goalkeeper' ? 'GK' :
+      player.position === 'Defender' ? 'DEF' :
+      player.position === 'Midfielder' ? 'MID' :
+      player.position === 'Forward' ? 'FWD' : 'PLR'
+    );
+  };
+
+  const PlayerNode = ({ player, delay }) => {
+    const role = getRole(player);
+    const lastName = player.playerName.split(' ').pop();
+    
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.7, y: 15 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ delay, type: 'spring', stiffness: 120, damping: 14 }}
+        onClick={() => setSelectedPlayer(player)}
+        className="flex flex-col items-center cursor-pointer group"
+      >
+        <div className="relative">
+          {/* Active Glow */}
+          <div className="absolute -inset-1 bg-neon/20 rounded-full blur opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          
+          {/* Circular Badge */}
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-white/12 to-white/5 border border-white/20 shadow-lg flex items-center justify-center relative z-10 overflow-hidden transition-all duration-300 group-hover:scale-105 group-hover:border-neon/40">
+            {getFlagUrl(player.country) ? (
+              <img 
+                src={getFlagUrl(player.country)} 
+                alt={player.country} 
+                className="w-full h-full object-cover" 
+              />
+            ) : (
+              <span className="text-xl sm:text-2xl filter drop-shadow-md select-none">
+                {COUNTRY_FLAGS[player.country] || '⚽'}
+              </span>
+            )}
+            
+            {/* Tactical Role Pill */}
+            <div className="absolute -bottom-1 -right-1 bg-dark/95 border border-white/10 px-1 rounded text-[7px] sm:text-[8px] font-black text-white scale-90 tracking-tight z-15">
+              {role}
+            </div>
+          </div>
+        </div>
+
+        {/* Player Name and Price */}
+        <div className="text-center mt-1 max-w-[72px] sm:max-w-[80px] z-10">
+          <p className="text-white text-[9px] sm:text-[10px] font-bold tracking-tight truncate filter drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.85)]">
+            {lastName}
+          </p>
+          <p className="text-neon text-[8px] sm:text-[9px] font-extrabold tracking-wide filter drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.85)]">
+            {player.price > 0 ? `${player.price} CR` : 'FREE'}
+          </p>
+        </div>
+      </motion.div>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-dark p-4 pb-24">
+    <div className="min-h-screen bg-dark p-4 pb-24 text-white">
+      {/* Title Header */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: -15 }}
         animate={{ opacity: 1, y: 0 }}
-        className="pt-8 pb-4"
+        className="pt-6 pb-3 flex items-center justify-between"
       >
-        <h1 className="text-2xl font-bold text-white">👥 Squad</h1>
-        <p className="text-white/40 text-sm mt-1">Formation: 4-3-3</p>
-      </motion.div>
-
-      {/* Pitch Background */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.2 }}
-        className="relative pitch-bg rounded-3xl border border-white/5 p-6 overflow-hidden"
-      >
-        {/* Pitch markings */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-full h-px bg-white/5" />
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">👥 My Squad</h1>
+          <p className="text-white/40 text-xs mt-0.5">Tactics: 4-3-3 Formation</p>
         </div>
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-16 border-b border-l border-r border-white/10 rounded-b-full" />
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-32 h-16 border-t border-l border-r border-white/10 rounded-t-full" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border border-white/10 rounded-full" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white/20 rounded-full" />
-
-        {/* Players */}
-        <div className="relative z-10">
-          <PositionRow title="Forwards" players={fwds} position="Forward" delayStart={0.3} />
-          <PositionRow title="Midfielders" players={mids} position="Midfielder" delayStart={0.6} />
-          <PositionRow title="Defenders" players={defs} position="Defender" delayStart={0.9} />
-          <PositionRow title="Goalkeeper" players={gk} position="Goalkeeper" delayStart={1.2} />
+        <div className="glass-card px-3 py-1.5 border border-white/10 text-xs font-semibold flex items-center gap-1.5">
+          <span className="text-neon">⚽</span>
+          <span>{starters.length + subs.length} Players</span>
         </div>
       </motion.div>
 
-      {/* Bench */}
+      {/* Football Pitch */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
+        transition={{ delay: 0.1 }}
+        className="relative w-full aspect-[3/3.8] max-w-[420px] mx-auto bg-gradient-to-b from-[#1b431e] to-[#102b12] rounded-[32px] border border-white/10 shadow-2xl p-4 overflow-hidden flex flex-col justify-between"
+      >
+        {/* Grass mowing stripes */}
+        <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{
+          backgroundImage: 'repeating-linear-gradient(0deg, #fff, #fff 40px, transparent 40px, transparent 80px)'
+        }} />
+
+        {/* Pitch Lines */}
+        <div className="absolute inset-3 border border-white/15 rounded-[26px] pointer-events-none">
+          {/* Halfway line */}
+          <div className="absolute top-1/2 left-0 right-0 h-px bg-white/15" />
+          
+          {/* Center Circle */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border border-white/15 rounded-full" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/20 rounded-full" />
+
+          {/* Goal top */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-10 border-b border-l border-r border-white/15 rounded-b-lg" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-3 border-b border-l border-r border-white/15 rounded-b-md" />
+
+          {/* Goal bottom */}
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-32 h-10 border-t border-l border-r border-white/15 rounded-t-lg" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-16 h-3 border-t border-l border-r border-white/15 rounded-t-md" />
+        </div>
+
+        {/* Pitch Content / Player rows */}
+        <div className="relative z-10 h-full flex flex-col justify-between py-1">
+          {/* Forwards Row */}
+          <div className="flex justify-around items-center w-full px-2 pt-2">
+            {fwds.length > 0 ? (
+              fwds.map((p, i) => <PlayerNode key={p.id} player={p} delay={0.15 + i * 0.08} />)
+            ) : (
+              <span className="text-white/10 text-xs">No Forwards</span>
+            )}
+          </div>
+
+          {/* Midfielders Row */}
+          <div className="flex justify-around items-center w-full px-4">
+            {mids.length > 0 ? (
+              mids.map((p, i) => <PlayerNode key={p.id} player={p} delay={0.35 + i * 0.08} />)
+            ) : (
+              <span className="text-white/10 text-xs">No Midfielders</span>
+            )}
+          </div>
+
+          {/* Defenders Row */}
+          <div className="flex justify-around items-center w-full px-1">
+            {defs.length > 0 ? (
+              defs.map((p, i) => <PlayerNode key={p.id} player={p} delay={0.55 + i * 0.08} />)
+            ) : (
+              <span className="text-white/10 text-xs">No Defenders</span>
+            )}
+          </div>
+
+          {/* Goalkeeper Row */}
+          <div className="flex justify-center items-center w-full pb-1">
+            {gk.length > 0 ? (
+              gk.map((p) => <PlayerNode key={p.id} player={p} delay={0.75} />)
+            ) : (
+              <span className="text-white/10 text-xs">No GK</span>
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Bench (Substitutes) */}
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
         className="mt-6"
       >
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-3 px-1">
           <span className="text-lg">🪑</span>
-          <h3 className="text-white font-semibold">Bench</h3>
+          <h3 className="text-white font-bold tracking-tight text-sm">Substitutes & Bench</h3>
+          <span className="text-white/30 text-xs font-medium">({subs.length} players)</span>
         </div>
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {players.length > 11 ? (
-            players.slice(11).map((p, i) => (
-              <motion.div
-                key={p.id}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.6 + i * 0.1 }}
-                className="glass-card p-3 min-w-[120px] flex flex-col items-center"
-              >
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-lg mb-2">
-                  {COUNTRY_FLAGS[p.country] || '⚽'}
-                </div>
-                <p className="text-white text-xs font-medium text-center truncate w-full">{p.playerName}</p>
-                <p className="text-neon text-xs">{p.price} CR</p>
-              </motion.div>
-            ))
+        
+        <div className="flex gap-3 overflow-x-auto pb-2 px-1">
+          {subs.length > 0 ? (
+            subs.map((p, i) => {
+              const role = getRole(p);
+              return (
+                <motion.div
+                  key={p.id}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 + i * 0.08 }}
+                  onClick={() => setSelectedPlayer(p)}
+                  className="glass-card p-3 min-w-[110px] flex flex-col items-center border border-white/5 cursor-pointer hover:border-white/20 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-lg mb-1.5 border border-white/10 relative overflow-hidden">
+                    {getFlagUrl(p.country) ? (
+                      <img 
+                        src={getFlagUrl(p.country)} 
+                        alt={p.country} 
+                        className="w-full h-full object-cover" 
+                      />
+                    ) : (
+                      <span>{COUNTRY_FLAGS[p.country] || '⚽'}</span>
+                    )}
+                    <span className="absolute -bottom-1 -right-1 bg-dark border border-white/10 px-1 rounded text-[6px] font-black text-white z-10">
+                      {role}
+                    </span>
+                  </div>
+                  <p className="text-white text-xs font-semibold text-center truncate w-full">{p.playerName.split(' ').pop()}</p>
+                  <p className="text-neon text-[10px] font-black mt-0.5">{p.price > 0 ? `${p.price} CR` : 'FREE'}</p>
+                </motion.div>
+              );
+            })
           ) : (
-            <p className="text-white/20 text-sm">No players on bench</p>
+            <div className="w-full glass-card p-4 text-center border-dashed border-white/5">
+              <p className="text-white/20 text-xs">No substitutes on the bench</p>
+            </div>
           )}
         </div>
       </motion.div>
+
+      {/* Player Detail Modal */}
+      <AnimatePresence>
+        {selectedPlayer && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedPlayer(null)}
+            className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="glass-card p-6 w-full max-w-sm border border-white/15 relative overflow-hidden"
+            >
+              {/* Glow corner */}
+              <div className="absolute top-0 right-0 w-24 h-24 bg-neon/10 rounded-full blur-2xl" />
+
+              <button 
+                onClick={() => setSelectedPlayer(null)}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/60 hover:text-white"
+              >
+                ✕
+              </button>
+
+              <div className="text-center mt-2 mb-6">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-4xl mx-auto mb-4 border border-white/20 shadow-2xl overflow-hidden">
+                  {getFlagUrl(selectedPlayer.country) ? (
+                    <img 
+                      src={getFlagUrl(selectedPlayer.country)} 
+                      alt={selectedPlayer.country} 
+                      className="w-full h-full object-cover" 
+                    />
+                  ) : (
+                    <span>{COUNTRY_FLAGS[selectedPlayer.country] || '⚽'}</span>
+                  )}
+                </div>
+                <h3 className="text-white font-black text-xl mb-1">{selectedPlayer.playerName}</h3>
+                <span className="px-2.5 py-0.5 rounded-full bg-neon/10 border border-neon/30 text-neon font-black text-[10px] tracking-wide uppercase">
+                  {getRole(selectedPlayer)} • {selectedPlayer.position}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-3 text-sm">
+                <div className="flex justify-between items-center py-2 border-b border-white/5">
+                  <span className="text-white/40">Country</span>
+                  <span className="text-white font-semibold flex items-center gap-2">
+                    {getFlagUrl(selectedPlayer.country) ? (
+                      <img 
+                        src={getFlagUrl(selectedPlayer.country)} 
+                        alt={selectedPlayer.country} 
+                        className="w-5 h-3.5 object-cover rounded shadow-sm border border-white/10" 
+                      />
+                    ) : (
+                      <span>{COUNTRY_FLAGS[selectedPlayer.country] || '🏳️'}</span>
+                    )}
+                    <span>{selectedPlayer.country}</span>
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-white/5">
+                  <span className="text-white/40">Value</span>
+                  <span className="text-neon font-black">{selectedPlayer.price > 0 ? `${selectedPlayer.price} CR` : 'FREE'}</span>
+                </div>
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-white/40">Squad Status</span>
+                  <span className={`font-semibold ${
+                    starters.some(p => p.id === selectedPlayer.id) ? 'text-emerald-400' : 'text-orange-400'
+                  }`}>
+                    {starters.some(p => p.id === selectedPlayer.id) ? 'Starting XI' : 'Substitute'}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedPlayer(null)}
+                className="w-full bg-white/5 border border-white/10 text-white font-bold py-3 rounded-xl text-sm mt-6 hover:bg-white/10 transition-colors"
+              >
+                Close Details
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

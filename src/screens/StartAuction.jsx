@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 import { useAppState } from '../context/AppContext';
 import { useToast } from '../context/ToastContext';
-import { startAuction, COUNTRY_FLAGS, POSITIONS, CLUBS } from '../dataStore';
+import { startAuction, COUNTRY_FLAGS, POSITIONS } from '../dataStore';
 
 const DURATION_OPTIONS = [
   { label: '30 seconds', value: 30 },
@@ -22,7 +22,6 @@ const StartAuction = () => {
   const [playerName, setPlayerName] = useState('');
   const [position, setPosition] = useState('Forward');
   const [country, setCountry] = useState('Netherlands');
-  const [club, setClub] = useState('Liverpool');
   const [startingPrice, setStartingPrice] = useState(1);
   const [duration, setDuration] = useState(defaultDuration);
 
@@ -38,7 +37,7 @@ const StartAuction = () => {
       playerName: playerName.trim(),
       position,
       country,
-      club,
+      club: '',
       startingPrice: Number(startingPrice),
       startedBy: currentUser,
       endsAt: Date.now() + (duration * 1000),
@@ -110,19 +109,6 @@ const StartAuction = () => {
           </div>
         </div>
 
-        {/* Club */}
-        <div className="glass-card p-5">
-          <label className="block text-white/50 text-sm font-medium mb-2">Club</label>
-          <select
-            value={club}
-            onChange={(e) => setClub(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-neon/50 appearance-none"
-          >
-            {CLUBS.map(c => (
-              <option key={c} value={c} className="bg-dark">{c}</option>
-            ))}
-          </select>
-        </div>
 
         {/* Starting Price */}
         <div className="glass-card p-5">

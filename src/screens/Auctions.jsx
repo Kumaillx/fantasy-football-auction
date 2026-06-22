@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../context/AppContext';
 import { useUser } from '../context/UserContext';
 import { useToast } from '../context/ToastContext';
-import { placeBid, endAuction, COUNTRY_FLAGS } from '../dataStore';
+import { placeBid, endAuction, COUNTRY_FLAGS, getFlagUrl } from '../dataStore';
 
 const Auctions = () => {
   const navigate = useNavigate();
@@ -119,12 +119,20 @@ const Auctions = () => {
                   {/* Header */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-2xl border border-white/10">
-                        {COUNTRY_FLAGS[auction.country] || '🏳️'}
+                      <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-2xl border border-white/10 overflow-hidden">
+                        {getFlagUrl(auction.country) ? (
+                          <img 
+                            src={getFlagUrl(auction.country)} 
+                            alt={auction.country} 
+                            className="w-full h-full object-cover" 
+                          />
+                        ) : (
+                          <span>{COUNTRY_FLAGS[auction.country] || '🏳️'}</span>
+                        )}
                       </div>
                       <div>
                         <h3 className="text-white font-bold text-lg">{auction.playerName}</h3>
-                        <p className="text-white/40 text-sm">{auction.position} • {auction.club}</p>
+                        <p className="text-white/40 text-sm">{auction.position} • {auction.country}</p>
                       </div>
                     </div>
                     <div className={`px-3 py-1 rounded-full text-xs font-bold border ${getTimeBg(auction.endsAt)}`}>
@@ -249,7 +257,17 @@ const Auctions = () => {
           <div className="flex flex-col gap-2">
             {endedAuctions.slice(-3).map(auction => (
               <div key={auction.id} className="glass-card p-4 flex items-center gap-3 opacity-60">
-                <span className="text-xl">{COUNTRY_FLAGS[auction.country] || '🏳️'}</span>
+                <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10 overflow-hidden">
+                  {getFlagUrl(auction.country) ? (
+                    <img 
+                      src={getFlagUrl(auction.country)} 
+                      alt={auction.country} 
+                      className="w-full h-full object-cover" 
+                    />
+                  ) : (
+                    <span>{COUNTRY_FLAGS[auction.country] || '🏳️'}</span>
+                  )}
+                </div>
                 <div className="flex-1">
                   <p className="text-white text-sm font-medium">{auction.playerName}</p>
                   <p className="text-white/30 text-xs">

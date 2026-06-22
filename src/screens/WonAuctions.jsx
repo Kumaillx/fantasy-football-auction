@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { useAppState } from '../context/AppContext';
 import { useUser } from '../context/UserContext';
-import { COUNTRY_FLAGS } from '../dataStore';
+import { COUNTRY_FLAGS, getFlagUrl } from '../dataStore';
 
 const WonAuctions = () => {
   const { currentUser } = useUser();
@@ -68,12 +68,20 @@ const WonAuctions = () => {
             whileTap={{ scale: 0.98 }}
             className="glass-card p-4 flex items-center gap-4"
           >
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-2xl border border-white/10">
-              {COUNTRY_FLAGS[player.country] || '🏳️'}
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center text-2xl border border-white/10 overflow-hidden">
+              {getFlagUrl(player.country) ? (
+                <img 
+                  src={getFlagUrl(player.country)} 
+                  alt={player.country} 
+                  className="w-full h-full object-cover" 
+                />
+              ) : (
+                <span>{COUNTRY_FLAGS[player.country] || '🏳️'}</span>
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-white font-semibold truncate">{player.playerName}</h3>
-              <p className="text-white/40 text-sm">{player.position} • {player.club}</p>
+              <p className="text-white/40 text-sm">{player.position} • {player.country}</p>
             </div>
             <div className="text-right">
               <p className="text-neon font-bold text-lg">{player.price} <span className="text-white/40 text-xs font-normal">CR</span></p>
