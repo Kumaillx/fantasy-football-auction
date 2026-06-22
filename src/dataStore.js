@@ -241,6 +241,7 @@ let state = {
   tournamentName: 'Fantasy Football Auction',
   defaultBudget: 150,
   defaultDuration: 60,
+  mockTimeOffset: 0,
 };
 
 let listeners = [];
@@ -264,15 +265,96 @@ export const updateState = (updater) => {
   notifyListeners();
 };
 
+// Simulation Time and PKT Date helpers
+export const getCurrentTime = () => {
+  return Date.now() + (state.mockTimeOffset || 0);
+};
+
+export const getPKTTime = (timestamp = getCurrentTime()) => {
+  const PKT_OFFSET = 5 * 60 * 60 * 1000; // UTC+5
+  return new Date(timestamp + PKT_OFFSET);
+};
+
+export const getAuctionDayInfo = (timestamp = getCurrentTime()) => {
+  const pktDate = getPKTTime(timestamp);
+  const yr = pktDate.getUTCFullYear();
+  const mo = pktDate.getUTCMonth();
+  const dy = pktDate.getUTCDate();
+  const hr = pktDate.getUTCHours();
+  const mn = pktDate.getUTCMinutes();
+
+  let targetYr = yr;
+  let targetMo = mo;
+  let targetDy = dy;
+
+  // Bidding day reset cutoff is 5:30 PM PKT
+  // If PKT time is >= 17:30 (5:30 PM), the target day is the next calendar day
+  const isAfterCutoff = hr > 17 || (hr === 17 && mn >= 30);
+  if (isAfterCutoff) {
+    const nextPkt = new Date(pktDate.getTime() + 24 * 60 * 60 * 1000);
+    targetYr = nextPkt.getUTCFullYear();
+    targetMo = nextPkt.getUTCMonth();
+    targetDy = nextPkt.getUTCDate();
+  }
+
+  const auctionDay = `${targetYr}-${String(targetMo + 1).padStart(2, '0')}-${String(targetDy).padStart(2, '0')}`;
+  
+  // Base deadline is 5:00 PM PKT (17:00 PKT = 12:00 UTC) on the target calendar day
+  const baseDeadline = Date.UTC(targetYr, targetMo, targetDy, 12, 0, 0, 0);
+
+  return {
+    auctionDay,
+    baseDeadline,
+    isAfterCutoff,
+    isCoolingPeriod: !isAfterCutoff && (hr === 17 && mn < 30)
+  };
+};
+
+export const getUserBidsCreatedCount = (userName, timestamp = getCurrentTime()) => {
+  const { auctionDay } = getAuctionDayInfo(timestamp);
+  return state.auctions.filter(a => a.startedBy === userName && a.auctionDay === auctionDay && a.status !== 'deleted').length;
+};
+
+export const setMockTimeOffset = (offset) => {
+  updateState(s => ({ ...s, mockTimeOffset: offset }));
+};
+
 // Actions
 export const startAuction = (auctionData) => {
+  const now = getCurrentTime();
+  const { auctionDay, baseDeadline, isCoolingPeriod } = getAuctionDayInfo(now);
+
+  if (isCoolingPeriod) {
+    return {
+      error: "Auctions cannot be started during the daily closing window (5:00 PM - 5:30 PM PKT). Please wait until 5:30 PM to start auctions for tomorrow."
+    };
+  }
+
+  // Count existing auctions by this user on the target auction day
+  const userCount = state.auctions.filter(a => a.startedBy === auctionData.startedBy && a.auctionDay === auctionDay && a.status !== 'deleted').length;
+  if (userCount >= 3) {
+    const todayStr = getAuctionDayInfo(now).auctionDay;
+    const dayLabel = auctionDay === todayStr ? 'today' : 'tomorrow';
+    return {
+      error: `Daily limit reached! You have already started 3 auctions for ${dayLabel} (${auctionDay}).`
+    };
+  }
+
   const auction = {
-    id: Date.now().toString(),
-    ...auctionData,
+    id: now.toString(),
+    playerName: auctionData.playerName,
+    position: auctionData.position,
+    country: auctionData.country,
+    club: auctionData.club || '',
+    startingPrice: auctionData.startingPrice || 1,
+    startedBy: auctionData.startedBy,
     currentBid: auctionData.startingPrice || 1,
     highestBidder: null,
     status: 'active',
-    createdAt: Date.now(),
+    createdAt: now,
+    endsAt: baseDeadline,
+    auctionDay: auctionDay,
+    extensionCount: 0,
   };
 
   updateState(s => ({
@@ -280,10 +362,10 @@ export const startAuction = (auctionData) => {
     auctions: [...s.auctions, auction],
     activityFeed: [
       {
-        id: Date.now().toString(),
+        id: now.toString(),
         type: 'auction_started',
         message: `${auctionData.startedBy} started auction for ${auctionData.playerName}`,
-        timestamp: Date.now(),
+        timestamp: now,
       },
       ...s.activityFeed
     ].slice(0, 50)
@@ -301,29 +383,52 @@ export const placeBid = (auctionId, bidder, amount) => {
 
   if (amount <= auction.currentBid) return false;
 
-  // Anti-sniping: extend if bid in last 5 seconds
-  const now = Date.now();
+  const now = getCurrentTime();
   const endsAt = auction.endsAt;
   const timeLeft = endsAt - now;
+  if (timeLeft <= 0) return false; // Auction has expired
+
+  // Determine baseDeadline for the auction's target day
+  const [y, m, d] = auction.auctionDay.split('-').map(Number);
+  const baseDeadline = Date.UTC(y, m - 1, d, 12, 0, 0, 0);
+
   let newEndsAt = endsAt;
-  if (timeLeft < 5000 && timeLeft > 0) {
-    newEndsAt = endsAt + 10000;
+  let newExtensionCount = auction.extensionCount || 0;
+
+  // Extension Window Rule:
+  // If endsAt is the base deadline (5:00 PM PKT) and someone places a bid within the last 20 minutes before it (<= 20 minutes left):
+  // Extend auction to 5:20 PM PKT
+  if (endsAt === baseDeadline) {
+    const twentyMinsInMs = 20 * 60 * 1000;
+    if (timeLeft <= twentyMinsInMs) {
+      newEndsAt = Date.UTC(y, m - 1, d, 12, 20, 0, 0); // 5:20 PM PKT
+    }
+  } else if (endsAt > baseDeadline) {
+    // Last-Minute Protection Rule:
+    // If endsAt is already extended and bid comes in during the last minute (<= 1 minute left):
+    const oneMinInMs = 60 * 1000;
+    if (timeLeft <= oneMinInMs) {
+      if (newExtensionCount < 10) {
+        newEndsAt = endsAt + 60 * 1000; // Add 1 minute
+        newExtensionCount += 1;
+      }
+    }
   }
 
   updateState(s => ({
     ...s,
     auctions: s.auctions.map(a => 
       a.id === auctionId 
-        ? { ...a, currentBid: amount, highestBidder: bidder, endsAt: newEndsAt }
+        ? { ...a, currentBid: amount, highestBidder: bidder, endsAt: newEndsAt, extensionCount: newExtensionCount }
         : a
     ),
-    bids: [...s.bids, { auctionId, bidder, amount, timestamp: Date.now() }],
+    bids: [...s.bids, { auctionId, bidder, amount, timestamp: now }],
     activityFeed: [
       {
-        id: Date.now().toString(),
+        id: now.toString(),
         type: 'bid',
         message: `${bidder} bid ${amount} CR on ${auction.playerName}`,
-        timestamp: Date.now(),
+        timestamp: now,
       },
       ...s.activityFeed
     ].slice(0, 50)
@@ -337,17 +442,18 @@ export const endAuction = (auctionId) => {
   if (!auction || auction.status !== 'active') return;
 
   const winner = auction.highestBidder;
+  const now = getCurrentTime();
 
   if (winner) {
     const wonPlayer = {
-      id: Date.now().toString(),
+      id: now.toString(),
       playerName: auction.playerName,
       owner: winner,
       price: auction.currentBid,
       country: auction.country,
       position: auction.position,
       club: '',
-      wonAt: Date.now(),
+      wonAt: now,
     };
 
     updateState(s => ({
@@ -368,10 +474,10 @@ export const endAuction = (auctionId) => {
       playersWon: [...s.playersWon, wonPlayer],
       activityFeed: [
         {
-          id: Date.now().toString(),
+          id: now.toString(),
           type: 'auction_won',
           message: `${winner} won ${auction.playerName} for ${auction.currentBid} CR`,
-          timestamp: Date.now(),
+          timestamp: now,
         },
         ...s.activityFeed
       ].slice(0, 50)

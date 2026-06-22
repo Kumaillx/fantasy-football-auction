@@ -4,14 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../context/AppContext';
 import { useUser } from '../context/UserContext';
 import { useToast } from '../context/ToastContext';
-import { placeBid, endAuction, COUNTRY_FLAGS, getFlagUrl } from '../dataStore';
+import { placeBid, endAuction, COUNTRY_FLAGS, getFlagUrl, getCurrentTime } from '../dataStore';
 
 const Auctions = () => {
   const navigate = useNavigate();
   const { currentUser } = useUser();
   const { users, auctions } = useAppState();
   const { addToast } = useToast();
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(getCurrentTime());
   const [customBidAmount, setCustomBidAmount] = useState({});
   const [showCustomBid, setShowCustomBid] = useState({});
   const intervalRef = useRef(null);
@@ -22,7 +22,7 @@ const Auctions = () => {
 
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      const currentTime = Date.now();
+      const currentTime = getCurrentTime();
       setNow(currentTime);
 
       // Check for expired auctions
@@ -38,8 +38,12 @@ const Auctions = () => {
 
   const formatTime = (ms) => {
     const totalSeconds = Math.max(0, Math.floor((ms - now) / 1000));
-    const mins = Math.floor(totalSeconds / 60);
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
     const secs = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
@@ -156,6 +160,24 @@ const Auctions = () => {
                     </div>
                   </div>
 
+                  {/* Extension Indicator */}
+                  {(() => {
+                    if (!auction.auctionDay) return null;
+                    const [y, m, d] = auction.auctionDay.split('-').map(Number);
+                    const baseDeadline = Date.UTC(y, m - 1, d, 12, 0, 0, 0);
+                    if (auction.endsAt > baseDeadline) {
+                      return (
+                        <div className="bg-neon/5 border border-neon/20 rounded-xl p-3 mb-4 flex items-center justify-between text-xs">
+                          <span className="text-white/50">🔥 Extension Active</span>
+                          <span className="text-neon font-bold font-mono">
+                            {auction.extensionCount > 0 ? `LMP Protection: ${auction.extensionCount}/10` : '20-min extension'}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
                   <p className="text-white/30 text-xs mb-4">Started by {auction.startedBy}</p>
 
                   {/* Bid Buttons */}
@@ -203,7 +225,7 @@ const Auctions = () => {
                               />
                               <button
                                 onClick={() => handleCustomBid(auction.id)}
-                                className="bg-neon text-dark font-bold px-4 rounded-xl"
+                                className="bg-neon text-dark font-bold px-4 rounded-xl shrink-0"
                               >
                                 Bid
                               </button>
